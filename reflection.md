@@ -23,8 +23,13 @@ The initial UML design centers on six classes: `Owner`, `Pet`, `Task`, `TaskMana
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+Yes, the design changed in three ways after reviewing the skeleton with AI feedback:
+
+1. **`Scheduler` now holds a `Pet` reference** — In the original design, `Pet` was linked to `Owner` but never reached the `Scheduler`. This meant pet-specific context (species, age) was unavailable during planning. Adding `pet` as a direct parameter to `Scheduler.__init__` keeps the door open for pet-aware scheduling rules (e.g. senior dogs need shorter walks) without breaking the current logic.
+
+2. **`_fits_in_budget` signature changed from `(tasks: list[Task])` to `(task: Task, minutes_used: int)`** — The original signature encouraged checking an already-built list, which would require building the plan twice. The new signature supports a greedy loop in `generate_plan`: iterate ranked tasks one at a time, check if the next task fits within remaining budget, and add or skip accordingly. This is a more natural and efficient scheduling pattern.
+
+3. **`DailyPlan` gained a `plan_date` field** — Without a date, every generated plan looks identical in storage. Adding `plan_date: date` (defaulting to today) makes plans distinguishable and lays the groundwork for history or streak tracking later.
 
 ---
 
@@ -37,8 +42,17 @@ The initial UML design centers on six classes: `Owner`, `Pet`, `Task`, `TaskMana
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+The scheduler uses a **greedy first-fit algorithm**: it iterates through tasks ranked by priority and adds each one if its duration fits within the remaining time budget. It never looks ahead or backtracks.
+
+This means it can leave time on the table. For example, if the owner has 25 minutes left and the next task needs 30 minutes, that task is skipped — even if two smaller tasks totaling 20 minutes are waiting further down the list and would fit comfortably. The schedule is built by checking cumulative duration against `available_minutes`, not by finding the combination of tasks that fills the budget most efficiently.
+
+This tradeoff is reasonable for a daily pet care app because:
+
+1. **Simplicity over optimality** — A pet owner generating a morning routine does not need a mathematically perfect schedule. They need a fast, predictable result that respects their highest-priority tasks first.
+2. **Priority is the primary constraint** — Missing a high-priority task (medication, feeding) to squeeze in a low-priority one (grooming) would be the wrong outcome even if it used more minutes. The greedy approach guarantees high-priority tasks are always considered first.
+3. **The cost of suboptimality is low** — Leaving 25 minutes unused is a minor inconvenience, not a correctness failure. The skipped tasks are surfaced in `DailyPlan.skipped_tasks`, so the owner can reschedule them manually.
+
+A future improvement would be a gap-filling second pass: after the main greedy loop completes, iterate over `skipped_tasks` once more and slot in any that fit the remaining minutes, without reordering priority-selected tasks.
 
 ---
 

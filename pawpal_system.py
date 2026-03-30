@@ -1,5 +1,6 @@
+import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 
 @dataclass
@@ -12,10 +13,29 @@ class Task:
     priority: int          # 1 = low, 2 = medium, 3 = high
     frequency: str = "daily"   # e.g. "daily", "weekly", "as-needed"
     is_completed: bool = False
+    due_date: date | None = None
 
-    def mark_complete(self) -> None:
-        """Mark this task as completed."""
+    def mark_complete(self) -> "Task | None":
+        """Mark this task as completed and return the next occurrence, or None."""
         self.is_completed = True
+
+        if self.frequency == "daily":
+            next_due = date.today() + timedelta(days=1)
+        elif self.frequency == "weekly":
+            next_due = date.today() + timedelta(weeks=1)
+        else:
+            return None
+
+        return Task(
+            task_id=uuid.uuid4().hex[:6],
+            name=self.name,
+            category=self.category,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            frequency=self.frequency,
+            is_completed=False,
+            due_date=next_due,
+        )
 
     def to_dict(self) -> dict:
         """Return a plain-dictionary representation of this task."""
@@ -27,6 +47,7 @@ class Task:
             "priority": self.priority,
             "frequency": self.frequency,
             "is_completed": self.is_completed,
+            "due_date": str(self.due_date) if self.due_date else None,
         }
 
 
@@ -140,6 +161,72 @@ class Scheduler:
     def _fits_in_budget(self, task: Task, minutes_used: int) -> bool:
         """Return True if adding this task stays within the owner's time budget."""
         return minutes_used + task.duration_minutes <= self.owner.available_minutes
+
+    def sort_by_time(self, tasks: list[Task] | None = None, reverse: bool = False) -> list[Task]:
+        """Return tasks sorted by duration_minutes, shortest first by default.
+
+        Uses a lambda key on ``task.duration_minutes`` so Python's built-in
+        ``sorted()`` can compare tasks numerically rather than by object identity.
+
+        Args:
+            tasks:   An explicit list of tasks to sort. If omitted, all pending
+                     tasks across the owner's pets are used.
+            reverse: When False (default) the shortest task appears first, which
+                     maximises how many tasks fit within the owner's time budget.
+                     When True the longest task appears first.
+
+        Returns:
+            A new sorted list; the original list (or pet task lists) are unchanged.
+        """
+        source = tasks if tasks is not None else self.owner.get_all_pending_tasks()
+        return sorted(source, key=lambda t: t.duration_minutes, reverse=reverse)
+
+    def filter_tasks(
+        self,
+        completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> list[Task]:
+        """Return tasks filtered by completion status and/or pet name.
+
+        Args:
+            completed: If True, return only completed tasks. If False, return only
+                       pending tasks. If None, return tasks regardless of status.
+            pet_name:  If given, return only tasks belonging to that pet.
+                       If None, return tasks across all pets.
+        """
+        results: list[Task] = []
+        for pet in self.owner.pets:
+            if pet_name is not None and pet.name != pet_name:
+                continue
+            for task in pet.tasks:
+                if completed is not None and task.is_completed != completed:
+                    continue
+                results.append(task)
+        return results
+
+    def mark_task_complete(self, pet_name: str, task_id: str) -> None:
+        """Mark a task complete and auto-schedule the next occurrence if recurring.
+
+        Delegates to ``Task.mark_complete()``, which returns a new ``Task`` whose
+        ``due_date`` is calculated with ``timedelta`` (``days=1`` for daily tasks,
+        ``weeks=1`` for weekly tasks). If a next task is produced it is appended
+        directly to the pet's task list so it will appear in the next generated plan.
+
+        Args:
+            pet_name: The name of the pet whose task should be completed.
+                      No-ops silently if the pet is not found.
+            task_id:  The ID of the task to mark complete.
+                      No-ops silently if the task is not found on that pet.
+        """
+        pet = next((p for p in self.owner.pets if p.name == pet_name), None)
+        if pet is None:
+            return
+        task = next((t for t in pet.tasks if t.task_id == task_id), None)
+        if task is None:
+            return
+        next_task = task.mark_complete()
+        if next_task is not None:
+            pet.add_task(next_task)
 
     def generate_plan(self) -> "DailyPlan":
         """Build and return a DailyPlan using the owner's available time and pet tasks."""
