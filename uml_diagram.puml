@@ -1,0 +1,134 @@
+@startuml PawPal_Updated
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam ArrowColor #444444
+skinparam ClassBorderColor #444444
+skinparam ClassBackgroundColor #FAFAFA
+skinparam NoteBackgroundColor #FFFDE7
+skinparam NoteBorderColor #F9A825
+
+' ─────────────────────────────────────────
+'  CLASSES
+' ─────────────────────────────────────────
+
+class Task {
+  + task_id : str
+  + name : str
+  + category : str
+  + duration_minutes : int
+  + priority : int
+  + frequency : str = "daily"
+  + is_completed : bool = False
+  + due_date : date | None
+  --
+  + mark_complete() : Task | None
+  + to_dict() : dict
+}
+
+class Pet {
+  + name : str
+  + species : str
+  + age : int
+  + tasks : list[Task]
+  --
+  + add_task(task: Task) : None
+  + remove_task(task_id: str) : None
+  + get_pending_tasks() : list[Task]
+  + get_summary() : str
+}
+
+class Owner {
+  + name : str
+  + available_minutes : int
+  + pets : list[Pet]
+  --
+  + add_pet(pet: Pet) : None
+  + remove_pet(pet_name: str) : None
+  + update_availability(minutes: int) : None
+  + get_all_tasks() : list[Task]
+  + get_all_pending_tasks() : list[Task]
+}
+
+class Scheduler {
+  + owner : Owner
+  --
+  - _rank_tasks() : list[Task]
+  - _fits_in_budget(task: Task, minutes_used: int) : bool
+  + sort_by_time(tasks: list[Task] | None, reverse: bool) : list[Task]
+  + filter_tasks(completed: bool | None, pet_name: str | None) : list[Task]
+  + mark_task_complete(pet_name: str, task_id: str) : None
+  + generate_plan() : DailyPlan
+}
+
+class DailyPlan {
+  + scheduled_tasks : list[Task]
+  + skipped_tasks : list[Task]
+  + total_duration : int
+  + reasoning : str
+  + plan_date : date
+  --
+  + display() : str
+  + to_dict() : dict
+}
+
+class TaskManager {
+  + tasks : list[Task]
+  --
+  + add_task(task: Task) : None
+  + remove_task(task_id: str) : None
+  + edit_task(task_id: str, **changes) : None
+  + get_all_tasks() : list[Task]
+  + get_by_priority() : list[Task]
+}
+
+' ─────────────────────────────────────────
+'  RELATIONSHIPS
+' ─────────────────────────────────────────
+
+' Composition: Owner owns Pets (pet cannot exist without owner in this model)
+Owner "1" *-- "0..*" Pet : owns >
+
+' Composition: Pet owns Tasks
+Pet "1" *-- "0..*" Task : contains >
+
+' Association: Scheduler holds a reference to an existing Owner
+Scheduler "1" --> "1" Owner : uses >
+
+' Dependency: Scheduler creates a DailyPlan on generate_plan()
+Scheduler ..> DailyPlan : <<creates>>
+
+' DailyPlan references Tasks (scheduled + skipped)
+DailyPlan "1" o-- "0..*" Task : scheduled_tasks / skipped_tasks >
+
+' TaskManager aggregates Tasks independently (standalone utility)
+TaskManager "1" o-- "0..*" Task : manages >
+
+' Task self-dependency: mark_complete() creates the next Task occurrence
+Task ..> Task : <<creates next\noccurrence>>
+
+' ─────────────────────────────────────────
+'  NOTES
+' ─────────────────────────────────────────
+
+note right of Task
+  mark_complete() returns Task | None:
+  • "daily"  → new Task due tomorrow
+  • "weekly" → new Task due next week
+  • "as-needed" → returns None
+end note
+
+note right of Scheduler
+  sort_by_time() delegates to Python sorted()
+  with a lambda key on duration_minutes.
+  filter_tasks() is composable:
+  completed + pet_name both optional.
+end note
+
+note bottom of TaskManager
+  Standalone utility — not connected
+  to Scheduler or Owner in runtime.
+  Used for bulk/flat task operations.
+end note
+
+@enduml
