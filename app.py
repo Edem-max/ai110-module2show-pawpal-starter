@@ -121,8 +121,43 @@ if st.button("Add task"):
         st.success(f"Task '{task_title}' added to {assign_to}.")
 
 if st.session_state.tasks:
-    st.write("Current tasks:")
-    st.table(st.session_state.tasks)
+    # Build a live Scheduler so we can call its methods for display
+    if st.session_state.owner is not None:
+        _scheduler = Scheduler(st.session_state.owner)
+
+        # --- Conflict warning: total pending time exceeds budget ---
+        pending = st.session_state.owner.get_all_pending_tasks()
+        total_pending_min = sum(t.duration_minutes for t in pending)
+        if total_pending_min > st.session_state.owner.available_minutes:
+            overflow = total_pending_min - st.session_state.owner.available_minutes
+            st.warning(
+                f"Conflict detected: {total_pending_min} min of tasks exceeds "
+                f"your {st.session_state.owner.available_minutes}-min budget by "
+                f"{overflow} min. Some tasks will be skipped."
+            )
+
+        # --- Sorted task table via Scheduler.sort_by_time() ---
+        sorted_tasks = _scheduler.sort_by_time()
+        PRIORITY_LABEL = {1: "Low", 2: "Medium", 3: "High"}
+        st.write("Current tasks (sorted shortest first):")
+        st.table(
+            [
+                {
+                    "Pet": next(
+                        (p.name for p in st.session_state.owner.pets if t in p.tasks),
+                        "—",
+                    ),
+                    "Task": t.name,
+                    "Duration (min)": t.duration_minutes,
+                    "Priority": PRIORITY_LABEL.get(t.priority, t.priority),
+                    "Done": "Yes" if t.is_completed else "No",
+                }
+                for t in sorted_tasks
+            ]
+        )
+    else:
+        st.write("Current tasks:")
+        st.table(st.session_state.tasks)
 else:
     st.info("No tasks yet. Add one above.")
 
@@ -138,5 +173,42 @@ if st.button("Generate schedule"):
     else:
         scheduler = Scheduler(st.session_state.owner)
         plan = scheduler.generate_plan()
-        st.success("Schedule generated!")
-        st.text(plan.display())
+
+        # --- Summary metrics ---
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Scheduled", len(plan.scheduled_tasks))
+        col_b.metric("Skipped", len(plan.skipped_tasks))
+        col_c.metric(
+            "Time used",
+            f"{plan.total_duration} / {st.session_state.owner.available_minutes} min",
+        )
+
+        # --- Scheduled tasks ---
+        if plan.scheduled_tasks:
+            st.success(f"Schedule generated for {st.session_state.owner.name}!")
+            PRIORITY_LABEL = {1: "Low", 2: "Medium", 3: "High"}
+            st.table(
+                [
+                    {
+                        "Task": t.name,
+                        "Category": t.category,
+                        "Duration (min)": t.duration_minutes,
+                        "Priority": PRIORITY_LABEL.get(t.priority, t.priority),
+                    }
+                    for t in plan.scheduled_tasks
+                ]
+            )
+        else:
+            st.warning("No tasks could be scheduled within your time budget.")
+
+        # --- Skipped tasks ---
+        if plan.skipped_tasks:
+            st.warning(
+                f"{len(plan.skipped_tasks)} task(s) skipped due to time constraints:"
+            )
+            for t in plan.skipped_tasks:
+                st.write(f"- **{t.name}** ({t.duration_minutes} min)")
+
+        # --- Reasoning ---
+        with st.expander("Scheduling reasoning"):
+            st.write(plan.reasoning)
