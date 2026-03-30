@@ -5,73 +5,90 @@ skinparam classFontStyle bold
 skinparam ArrowColor #444444
 skinparam ClassBorderColor #444444
 skinparam ClassBackgroundColor #FAFAFA
-skinparam NoteBackgroundColor #FFFDE7
+skinparam NoteBackgroundColor #FFF9C4
 skinparam NoteBorderColor #F9A825
 
-' ─────────────────────────────────────────
-'  CLASSES
-' ─────────────────────────────────────────
+' ═══════════════════════════════════════════════════════
+'  UPDATED UML — PawPal+
+'  Changes from initial diagram are marked [UPDATED] or
+'  [ADDED]. Removed items are described in notes.
+' ═══════════════════════════════════════════════════════
 
+' ───────────────────────────────────────
+'  Task
+'  [UPDATED] mark_complete() now returns Task | None
+'  [ADDED]   frequency, due_date attributes
+' ───────────────────────────────────────
 class Task {
   + task_id : str
   + name : str
   + category : str
   + duration_minutes : int
   + priority : int
-  + frequency : str = "daily"
   + is_completed : bool = False
-  + due_date : date | None
+  + frequency : str = "daily"      ' [ADDED]
+  + due_date : date | None         ' [ADDED]
   --
-  + mark_complete() : Task | None
+  + mark_complete() : Task | None  ' [UPDATED] was void
   + to_dict() : dict
 }
 
+note right of Task
+  [UPDATED] mark_complete() return type corrected:
+  • "daily"     → new Task due tomorrow
+  • "weekly"    → new Task due next week
+  • "as-needed" → returns None (no new task)
+
+  [ADDED] frequency + due_date drive
+  the recurrence logic above.
+end note
+
+' ───────────────────────────────────────
+'  Pet
+'  [REMOVED] +Owner owner attribute
+'  [ADDED]   tasks list + task methods
+' ───────────────────────────────────────
 class Pet {
   + name : str
   + species : str
   + age : int
-  + tasks : list[Task]
+  + tasks : list[Task]             ' [ADDED]
   --
-  + add_task(task: Task) : None
-  + remove_task(task_id: str) : None
-  + get_pending_tasks() : list[Task]
+  + add_task(task: Task) : None    ' [ADDED]
+  + remove_task(task_id: str) : None  ' [ADDED]
+  + get_pending_tasks() : list[Task]  ' [ADDED]
   + get_summary() : str
 }
 
+note right of Pet
+  [REMOVED] +Owner owner attribute.
+  Pet does not hold a back-reference
+  to Owner in the final implementation.
+  The "belongs to" arrow is also removed.
+end note
+
+' ───────────────────────────────────────
+'  Owner
+'  [UPDATED] multiplicity: 1 owner → many pets
+'  [ADDED]   pets list + pet/task methods
+' ───────────────────────────────────────
 class Owner {
   + name : str
   + available_minutes : int
-  + pets : list[Pet]
+  + pets : list[Pet]               ' [ADDED]
   --
-  + add_pet(pet: Pet) : None
-  + remove_pet(pet_name: str) : None
+  + add_pet(pet: Pet) : None       ' [ADDED]
+  + remove_pet(pet_name: str) : None  ' [ADDED]
   + update_availability(minutes: int) : None
-  + get_all_tasks() : list[Task]
-  + get_all_pending_tasks() : list[Task]
+  + get_all_tasks() : list[Task]   ' [ADDED]
+  + get_all_pending_tasks() : list[Task]  ' [ADDED]
 }
 
-class Scheduler {
-  + owner : Owner
-  --
-  - _rank_tasks() : list[Task]
-  - _fits_in_budget(task: Task, minutes_used: int) : bool
-  + sort_by_time(tasks: list[Task] | None, reverse: bool) : list[Task]
-  + filter_tasks(completed: bool | None, pet_name: str | None) : list[Task]
-  + mark_task_complete(pet_name: str, task_id: str) : None
-  + generate_plan() : DailyPlan
-}
-
-class DailyPlan {
-  + scheduled_tasks : list[Task]
-  + skipped_tasks : list[Task]
-  + total_duration : int
-  + reasoning : str
-  + plan_date : date
-  --
-  + display() : str
-  + to_dict() : dict
-}
-
+' ───────────────────────────────────────
+'  TaskManager
+'  No structural changes — but its
+'  relationship to Scheduler is removed.
+' ───────────────────────────────────────
 class TaskManager {
   + tasks : list[Task]
   --
@@ -82,53 +99,90 @@ class TaskManager {
   + get_by_priority() : list[Task]
 }
 
-' ─────────────────────────────────────────
-'  RELATIONSHIPS
-' ─────────────────────────────────────────
-
-' Composition: Owner owns Pets (pet cannot exist without owner in this model)
-Owner "1" *-- "0..*" Pet : owns >
-
-' Composition: Pet owns Tasks
-Pet "1" *-- "0..*" Task : contains >
-
-' Association: Scheduler holds a reference to an existing Owner
-Scheduler "1" --> "1" Owner : uses >
-
-' Dependency: Scheduler creates a DailyPlan on generate_plan()
-Scheduler ..> DailyPlan : <<creates>>
-
-' DailyPlan references Tasks (scheduled + skipped)
-DailyPlan "1" o-- "0..*" Task : scheduled_tasks / skipped_tasks >
-
-' TaskManager aggregates Tasks independently (standalone utility)
-TaskManager "1" o-- "0..*" Task : manages >
-
-' Task self-dependency: mark_complete() creates the next Task occurrence
-Task ..> Task : <<creates next\noccurrence>>
-
-' ─────────────────────────────────────────
-'  NOTES
-' ─────────────────────────────────────────
-
-note right of Task
-  mark_complete() returns Task | None:
-  • "daily"  → new Task due tomorrow
-  • "weekly" → new Task due next week
-  • "as-needed" → returns None
+note bottom of TaskManager
+  [REMOVED] Scheduler --> TaskManager relationship.
+  TaskManager is a standalone utility class.
+  Scheduler only holds a reference to Owner,
+  not TaskManager.
 end note
+
+' ───────────────────────────────────────
+'  Scheduler
+'  [REMOVED] +TaskManager task_manager attribute
+'  [ADDED]   sort_by_time(), filter_tasks(),
+'            mark_task_complete() methods
+' ───────────────────────────────────────
+class Scheduler {
+  + owner : Owner
+  --
+  - _rank_tasks() : list[Task]
+  - _fits_in_budget(task: Task, minutes_used: int) : bool
+  + sort_by_time(tasks: list[Task] | None, reverse: bool) : list[Task]  ' [ADDED]
+  + filter_tasks(completed: bool | None, pet_name: str | None) : list[Task]  ' [ADDED]
+  + mark_task_complete(pet_name: str, task_id: str) : None  ' [ADDED]
+  + generate_plan() : DailyPlan
+}
 
 note right of Scheduler
-  sort_by_time() delegates to Python sorted()
-  with a lambda key on duration_minutes.
-  filter_tasks() is composable:
-  completed + pet_name both optional.
+  [REMOVED] +TaskManager task_manager attribute.
+  Scheduler navigates tasks through
+  owner → pets → tasks instead.
+
+  [ADDED] sort_by_time() uses a lambda key
+  on duration_minutes via sorted().
+
+  [ADDED] filter_tasks() is composable:
+  completed and pet_name are both optional.
+
+  [ADDED] mark_task_complete() triggers
+  Task.mark_complete() and appends the
+  next occurrence to the pet's task list.
 end note
 
-note bottom of TaskManager
-  Standalone utility — not connected
-  to Scheduler or Owner in runtime.
-  Used for bulk/flat task operations.
-end note
+' ───────────────────────────────────────
+'  DailyPlan
+'  [ADDED] plan_date attribute
+' ───────────────────────────────────────
+class DailyPlan {
+  + scheduled_tasks : list[Task]
+  + skipped_tasks : list[Task]
+  + total_duration : int
+  + reasoning : str
+  + plan_date : date               ' [ADDED]
+  --
+  + display() : str
+  + to_dict() : dict
+}
+
+' ═══════════════════════════════════════════════════════
+'  RELATIONSHIPS
+' ═══════════════════════════════════════════════════════
+
+' [UPDATED] was "1" --> "1" (wrong type, wrong multiplicity)
+Owner "1" *-- "0..*" Pet : owns >
+
+' [ADDED] — was missing entirely in initial diagram
+Pet "1" *-- "0..*" Task : contains >
+
+' [UNCHANGED] Scheduler associates with Owner
+Scheduler "1" --> "1" Owner : uses >
+
+' [UPDATED] was --> (plain arrow); now dependency (creates)
+Scheduler ..> DailyPlan : <<creates>>
+
+' [UNCHANGED] DailyPlan aggregates Tasks
+DailyPlan "1" o-- "0..*" Task : scheduled / skipped >
+
+' [UNCHANGED] TaskManager aggregates Tasks
+TaskManager "1" o-- "0..*" Task : manages >
+
+' [ADDED] Task creates next occurrence of itself
+Task ..> Task : <<creates next\noccurrence>>
+
+' ═══════════════════════════════════════════════════════
+'  REMOVED RELATIONSHIPS (were in initial diagram)
+' ═══════════════════════════════════════════════════════
+' Pet --> Owner : belongs to        REMOVED — no back-ref in code
+' Scheduler --> TaskManager         REMOVED — Scheduler uses Owner only
 
 @enduml
