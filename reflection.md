@@ -74,8 +74,19 @@ A future improvement would be a gap-filling second pass: after the main greedy l
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+Five core behaviors were identified by reviewing `pawpal_system.py` directly:
+
+1. **Priority ordering** — `_rank_tasks()` sorts by `(-priority, duration_minutes)`. A priority-3 task must always appear in the plan before a priority-1 task, regardless of insertion order.
+
+2. **Skipped tasks are preserved, not dropped** — `generate_plan()` routes over-budget tasks into `skipped_tasks`. After generating a plan with a tight budget, every task must appear in either `scheduled_tasks` or `skipped_tasks` — none silently lost.
+
+3. **`mark_complete()` returns the correct next occurrence** — A `"daily"` task should return a new task with `due_date = date.today() + timedelta(days=1)`. A `"weekly"` task should return `due_date = date.today() + timedelta(weeks=1)`. An `"as-needed"` task should return `None`.
+
+4. **Completed tasks are excluded from the next plan** — `get_all_pending_tasks()` filters by `not t.is_completed`. After calling `mark_task_complete()`, the original completed task must not appear in a freshly generated `DailyPlan`.
+
+5. **`filter_tasks()` correctly combines both parameters** — When called with `completed=False` and `pet_name="Mochi"`, only Mochi's pending tasks should be returned — not Luna's, and not Mochi's completed tasks. Each parameter should be tested alone and in combination.
+
+These five cover the full task lifecycle: **adding → ranking → scheduling → completing → recurring**.
 
 **b. Confidence**
 
