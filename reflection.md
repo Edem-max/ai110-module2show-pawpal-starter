@@ -4,8 +4,22 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+The initial UML design centers on six classes: `Owner`, `Pet`, `Task`, `TaskManager`, `Scheduler`, and `DailyPlan`.
+
+- `Owner` holds the pet owner's name and daily available time, which the scheduler uses as a hard constraint.
+- `Pet` stores basic pet info (name, species, age) and is linked to the owner.
+- `Task` represents a single care activity with a name, category, duration in minutes, and a priority level (1–5).
+- `TaskManager` handles adding, editing, and removing tasks — keeping data management separate from planning logic.
+- `Scheduler` takes the owner's constraints and the task list, then selects and orders tasks that fit within the available time.
+- `DailyPlan` stores the final scheduled tasks, total duration, and a plain-language explanation of why each task was included or skipped.
+
+**Three core actions a user can perform:**
+
+1. **Add a pet and owner profile** — The user enters their name, their pet's name/species, and how many minutes per day they have available. This sets the constraints the scheduler will use when building the plan.
+
+2. **Add and manage care tasks** — The user creates tasks like "morning walk" (30 min, priority 5) or "flea treatment" (10 min, priority 3). They can edit duration and priority, or remove tasks that no longer apply.
+
+3. **Generate and view today's daily plan** — The user triggers the scheduler, which selects tasks by priority and fits them within the available time. The app displays the scheduled tasks in order and explains why certain tasks were included or left out.
 
 **b. Design changes**
 
