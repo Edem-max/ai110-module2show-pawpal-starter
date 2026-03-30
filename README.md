@@ -46,6 +46,32 @@ The new task is appended to the pet's task list immediately and will appear in t
 
 ---
 
+## Testing PawPal+
+
+### Run the test suite
+
+```bash
+python3 -m pytest tests/test_pawpal.py -v
+```
+
+### What the tests cover
+
+| Test | Area | Description |
+|---|---|---|
+| `test_mark_complete_changes_status` | Task state | `mark_complete()` flips `is_completed` from `False` to `True` |
+| `test_add_task_increases_pet_task_count` | Pet management | `Pet.add_task()` grows the task list by one |
+| `test_sort_by_time_returns_chronological_order` | **Sorting** | `Scheduler.sort_by_time()` returns tasks in ascending duration order |
+| `test_daily_task_creates_next_occurrence_on_complete` | **Recurrence** | Completing a `daily` task appends a new task due tomorrow |
+| `test_scheduler_flags_duplicate_due_times` | **Conflict detection** | Two same-priority tasks at the same time respect the budget; the second is skipped |
+
+### Confidence Level
+
+**4 / 5 stars**
+
+The core scheduling behaviors — sorting, recurrence, and conflict handling — are verified and all 5 tests pass. One star is withheld because the conflict detection test exercises budget overflow as a proxy for duplicate-time flagging (the scheduler has no explicit duplicate-time check), and edge cases like DST transitions, leap-year recurrence, and concurrent edits are not yet covered.
+
+---
+
 ## Getting started
 
 ### Setup
