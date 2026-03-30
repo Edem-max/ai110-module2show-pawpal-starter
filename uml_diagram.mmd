@@ -1,0 +1,118 @@
+classDiagram
+
+%% ─────────────────────────────────────────────────────
+%%  PawPal+ — Updated Class Diagram
+%%  Paste into https://mermaid.live to render
+%%
+%%  Change markers vs initial UML:
+%%    [ADDED]   — new attribute or method
+%%    [UPDATED] — existed but corrected
+%%    [REMOVED] — present in initial, deleted from final
+%% ─────────────────────────────────────────────────────
+
+    class Task {
+        +str task_id
+        +str name
+        +str category
+        +int duration_minutes
+        +int priority
+        +bool is_completed
+        +str frequency
+        +date due_date
+        +mark_complete() Task_or_None
+        +to_dict() dict
+    }
+
+    note for Task "ADDED: frequency, due_date\nUPDATED: mark_complete returns Task|None\n daily→new task tomorrow, weekly→next week\n as-needed→None"
+
+    class Pet {
+        +str name
+        +str species
+        +int age
+        +list~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_id) None
+        +get_pending_tasks() list
+        +get_summary() str
+    }
+
+    note for Pet "REMOVED: owner back-reference attribute\nADDED: tasks list, add/remove/pending methods"
+
+    class Owner {
+        +str name
+        +int available_minutes
+        +list~Pet~ pets
+        +add_pet(pet) None
+        +remove_pet(pet_name) None
+        +update_availability(minutes) None
+        +get_all_tasks() list
+        +get_all_pending_tasks() list
+    }
+
+    note for Owner "UPDATED: multiplicity 1 owner to many pets\nADDED: pets list, add/remove pet methods\nADDED: get_all_tasks, get_all_pending_tasks"
+
+    class TaskManager {
+        +list~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_id) None
+        +edit_task(task_id, changes) None
+        +get_all_tasks() list
+        +get_by_priority() list
+    }
+
+    note for TaskManager "REMOVED: Scheduler→TaskManager relationship\nStandalone utility — not used by Scheduler"
+
+    class Scheduler {
+        +Owner owner
+        +sort_by_time(tasks, reverse) list
+        +filter_tasks(completed, pet_name) list
+        +mark_task_complete(pet_name, task_id) None
+        +generate_plan() DailyPlan
+        -_rank_tasks() list
+        -_fits_in_budget(task, minutes_used) bool
+    }
+
+    note for Scheduler "REMOVED: task_manager attribute\nADDED: sort_by_time, filter_tasks, mark_task_complete\nNavigates tasks via owner → pets → tasks"
+
+    class DailyPlan {
+        +list~Task~ scheduled_tasks
+        +list~Task~ skipped_tasks
+        +int total_duration
+        +str reasoning
+        +date plan_date
+        +display() str
+        +to_dict() dict
+    }
+
+    note for DailyPlan "ADDED: plan_date attribute"
+
+%% ─────────────────────────────────────────────────────
+%%  RELATIONSHIPS
+%% ─────────────────────────────────────────────────────
+
+    %% [UPDATED] was "1"-->"1" association — now composition, 0..*
+    Owner "1" *-- "0..*" Pet : owns
+
+    %% [ADDED] was missing entirely in initial diagram
+    Pet "1" *-- "0..*" Task : contains
+
+    %% [UNCHANGED]
+    Scheduler "1" --> "1" Owner : uses
+
+    %% [UPDATED] was plain arrow — now labelled dependency
+    Scheduler ..> DailyPlan : creates
+
+    %% [UNCHANGED]
+    DailyPlan "1" o-- "0..*" Task : scheduled / skipped
+
+    %% [UNCHANGED]
+    TaskManager "1" o-- "0..*" Task : manages
+
+    %% [ADDED] self-reference: mark_complete creates next occurrence
+    Task ..> Task : creates next occurrence
+
+%% ─────────────────────────────────────────────────────
+%%  REMOVED RELATIONSHIPS (were in initial diagram)
+%%    Pet --> Owner : belongs to     (no back-ref in code)
+%%    Scheduler --> TaskManager      (Scheduler uses Owner only)
+%% ─────────────────────────────────────────────────────
