@@ -170,3 +170,4 @@ Key design decisions reflected in the diagram:
 - `Scheduler` holds a reference to `Owner` (association), not ownership
 - `Scheduler ..> DailyPlan` — dependency; `generate_plan()` creates and returns a new plan each call
 - `Task ..> Task` — self-dependency; `mark_complete()` produces the next recurring instance
+<img width="1343" height="922" alt="Screenshot 2026-03-31 at 02 08 35" src="https://github.com/user-attachments/assets/0f4c300b-0324-4ade-849b-6a57c9e0b7f0" />
