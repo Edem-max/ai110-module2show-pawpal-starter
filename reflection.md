@@ -37,8 +37,11 @@ Yes, the design changed in three ways after reviewing the skeleton with AI feedb
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler considers two constraints: **time budget** (`owner.available_minutes`) and **task priority** (1 = low, 2 = medium, 3 = high). A secondary tiebreaker — shortest duration first — applies only when two tasks share the same priority level.
+
+The decision to rank priority above time efficiency came directly from the domain. A pet care app must guarantee that a feeding or medication task (priority 3) is always attempted before a grooming task (priority 1), even if including the grooming task would produce a more "full" schedule mathematically. Getting the wrong task done on time is worse than leaving a few minutes unused. Time budget is a hard cap — the scheduler never exceeds it — but it is secondary to correctness of care ordering.
+
+Owner preferences beyond priority (preferred task order, pet-specific rules like "senior dog needs rest between walks") were deliberately excluded from this iteration. Adding them would have required either a richer `Task` model or per-pet scheduling rules in `Scheduler`, both of which would complicate the logic before the core greedy algorithm was proven correct. The current design leaves a clear extension point: `_rank_tasks()` is a single private method, so pet-aware sorting can be introduced there without touching `generate_plan()`.
 
 **b. Tradeoffs**
 
@@ -60,13 +63,25 @@ A future improvement would be a gap-filling second pass: after the main greedy l
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+AI tools were used across every phase of the project, but with a different role in each:
+
+- **Design phase** — Used chat to stress-test the initial UML before writing any code. Prompts like *"Based on my final implementation, what updates should I make to my initial UML diagram?"* surfaced structural issues (the missing `Pet *-- Task` composition, the incorrect `Pet → Owner` back-reference) that would have been harder to catch once code existed.
+
+- **Implementation phase** — Copilot's inline completions were most effective for method bodies that followed a clear pattern: `filter_tasks`, `sort_by_time`, and the `mark_complete` recurrence logic all benefited from completions that correctly applied `sorted()` with a `lambda` key or `timedelta` arithmetic. The completions reduced keystrokes but, more usefully, surfaced the standard Python idiom immediately so I could evaluate it rather than recall it from memory.
+
+- **Test generation** — Prompting with the full system file and asking for tests covering *sorting correctness*, *recurrence logic*, and *conflict detection* produced structurally correct test scaffolds. However, the specific assertions — particularly what "conflict" means in a budget-based scheduler — required manual refinement (see section 3b).
+
+- **Documentation** — Copilot Chat with `#codebase` was used to draft the Features section of the README. The most effective prompt pattern was *"describe what this method does in one sentence from a user's perspective"* rather than *"summarise this file"*, which tended to produce overly technical output.
+
+The single most useful prompt pattern across all phases was **providing the actual code as context** rather than describing it. Prompts that attached `#file:pawpal_system.py` consistently produced more accurate and relevant output than prompts that described the system in natural language.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+When AI generated the conflict detection test, it initially asserted that `generate_plan()` would raise an exception or return a specific error flag when two tasks shared the same `due_date`. That framing assumed the scheduler had an explicit duplicate-time check — it does not. The scheduler's only mechanism is the time budget.
+
+The suggestion was rejected because accepting it would have required adding a new code path to `Scheduler` that did not exist and was not needed for the app's current behavior. Instead, the test was rewritten to reflect what the code *actually does*: when two same-priority tasks together exceed the budget, exactly one is scheduled and one appears in `skipped_tasks`. The test verifies observable behavior rather than an assumed implementation detail.
+
+Verification involved reading `generate_plan()` line by line, tracing the greedy loop with two 20-minute tasks and a 30-minute budget on paper, and confirming the expected counts before writing the assertion. Running `pytest -v` after each draft confirmed the test passed for the right reason — not just that it passed.
 
 ---
 
@@ -90,8 +105,15 @@ These five cover the full task lifecycle: **adding → ranking → scheduling �
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+Confidence level: **4 / 5**. The five implemented tests cover the full task lifecycle — adding, ranking, scheduling, completing, and recurring — and all pass. The greedy algorithm is simple enough that its behavior is easy to reason about manually, which increases confidence beyond what the tests alone provide.
+
+The missing star reflects three untested areas:
+
+1. **Recurrence boundary dates** — A `"weekly"` task completed on Feb 22 should produce `due_date = Mar 1`, not a date 7 calendar days away that accidentally crosses a month boundary incorrectly. The current `timedelta(weeks=1)` handles this correctly in Python, but it has not been tested explicitly.
+
+2. **Completed task exclusion from the next plan** — Section 4a identifies this as a key behavior, but no test currently asserts that a completed task is absent from a freshly generated `DailyPlan`. The logic exists in `get_all_pending_tasks()`, but the integration path through `generate_plan()` is untested end-to-end.
+
+3. **`filter_tasks` with both parameters combined** — Individual parameter tests exist implicitly, but a test asserting that `filter_tasks(completed=False, pet_name="Mochi")` excludes both completed Mochi tasks *and* all Luna tasks simultaneously has not been written.
 
 ---
 
@@ -99,12 +121,20 @@ These five cover the full task lifecycle: **adding → ranking → scheduling �
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+The part of this project I am most satisfied with is the **separation between domain logic and the UI**. `pawpal_system.py` has no Streamlit imports and no awareness of how it is displayed. Every scheduling decision — ranking, budget checking, recurrence — lives in Python classes that can be tested, reasoned about, and reused independently of any frontend. This paid off directly when the UI needed to be updated: swapping `st.text(plan.display())` for `st.metric`, `st.table`, and `st.warning` components required zero changes to `pawpal_system.py`. The boundary held cleanly.
+
+The recurrence design is also something I am satisfied with. Returning `Task | None` from `mark_complete()` keeps the logic inside the `Task` class (where the frequency knowledge lives) while letting `Scheduler.mark_task_complete()` decide what to do with the result. This avoided duplicating frequency-checking logic in both the model and the scheduler.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+Two things stand out for a next iteration:
+
+1. **Gap-filling second pass in `generate_plan()`** — As noted in section 2b, the greedy algorithm can leave unused time when a high-priority task doesn't fit but smaller lower-priority tasks would. A second pass over `skipped_tasks` after the main loop — inserting any task that fits the remaining budget without displacing already-scheduled tasks — would produce fuller schedules without changing the priority guarantee.
+
+2. **`TaskManager` integration** — `TaskManager` was designed as a standalone utility but is never wired into `Scheduler` or the Streamlit UI. In the current app, task management is done directly through `Pet.add_task()`. Either `TaskManager` should be connected to the owner/pet model as the single source of task mutations, or it should be removed to avoid confusion about which path to use. The current state — two separate mutation paths — is the kind of silent inconsistency that causes bugs later.
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+The most important thing I learned is that **AI tools are most valuable when you already have a structure to evaluate their output against**. When I had a UML diagram, I could look at an AI-generated method signature and immediately judge whether it fit the design or violated a relationship. When I had a test suite, I could accept or reject a suggested assertion by tracing what the code actually does. Without those anchors, AI suggestions are hard to evaluate — they sound plausible but there is no frame to check them against.
+
+This is what it means to be the lead architect in an AI-assisted project. The AI accelerates every phase — drafting, completing, generating, explaining — but it cannot set the direction, catch a design inconsistency it was not asked about, or know that a suggested addition would duplicate a responsibility that already exists elsewhere. That judgment belongs to the human. The right workflow is: design first, then use AI to execute faster within that design, then verify that the output still respects the design. Skipping the first step does not save time — it defers the design work until the code is harder to change.
