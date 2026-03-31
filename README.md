@@ -153,6 +153,7 @@ The core scheduling behaviors — sorting, recurrence, and conflict handling —
 and all 5 tests pass. One star is withheld because conflict detection exercises budget
 overflow as a proxy (no explicit duplicate-time check exists), and edge cases like DST
 transitions, leap-year recurrence, and concurrent edits are not yet covered.
+<img width="5791" height="3248" alt="mermaid-diagram-2026-03-31-020203" src="https://github.com/user-attachments/assets/126d5192-5b2f-4513-b25c-d842bf97fa0b" />
 
 ---
 
